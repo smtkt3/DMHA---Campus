@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: dmha-smart-learning-app
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /dmhs-api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: HOSTNAME
+        value: 0.0.0.0
+      - key: DMHS_ALLOW_DEMO_LOGIN
+        value: "true"
+      - key: DMHS_DATA_DIR
+        value: /app/data
+      - key: DMHS_UPLOAD_DIR
+        value: /app/public/uploads

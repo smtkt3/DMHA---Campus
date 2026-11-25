@@ -1,0 +1,35 @@
+# Dependencies & build output
+node_modules/
+.next/
+out/
+dist/
+build/
+.cache/
+*.tsbuildinfo
+
+# Version control & local secrets
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Mobile Expo wrapper (not needed in web/API container)
+mobile/
+
+# Local SQLite database & test uploads (seeded cleanly on container boot)
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+public/uploads/*
+
+# Platform / editor artifacts (keep .figma/make/site.json needed by layout.tsx)
+.figma/runtime/
+.figma/design-context/
+.plugins/
+.opencode-skills/
+logs/
+*.log
+.DS_Store
+Thumbs.db

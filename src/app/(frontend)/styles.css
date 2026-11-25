@@ -1,0 +1,187 @@
+@import 'tailwindcss';
+
+@layer base {
+  :root {
+    --ink: #0f172a;
+    --accent: #10b981;
+    --surface: #f8fafc;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    background: #f8fafc;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-manrope), -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #0f172a;
+    background: #f8fafc;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid #10b981;
+    outline-offset: 2px;
+  }
+}
+
+/* Refined DMHA Institutional Surface & Elevation */
+.dmhs-card {
+  background: #ffffff;
+  border: 1px solid rgb(226 232 240 / 85%);
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 3%),
+    0 8px 24px rgb(15 23 42 / 3.5%);
+}
+
+.dmhs-hero {
+  background:
+    radial-gradient(circle at 92% 14%, rgb(16 185 129 / 18%), transparent 38%),
+    radial-gradient(circle at 12% 95%, rgb(99 102 241 / 14%), transparent 42%),
+    linear-gradient(135deg, #0f172a 0%, #16223a 100%);
+  box-shadow: 0 18px 42px rgb(15 23 42 / 14%);
+}
+
+.action-violet {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.action-cyan {
+  background: #ecfeff;
+  color: #0e7490;
+}
+
+.action-orange {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.action-lime {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.bar-violet {
+  background: #6366f1;
+}
+
+.bar-cyan {
+  background: #06b6d4;
+}
+
+.bar-lime {
+  background: #10b981;
+}
+
+@keyframes dmhsFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dmhs-fade {
+  animation: dmhsFadeIn 0.22s ease-out;
+}
+
+@keyframes dmhsFloatIn {
+  from {
+    opacity: 0;
+    transform: translate3d(28px, -8px, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes dmhsFloatProgress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.dmhs-float-card {
+  animation: dmhsFloatIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.dmhs-float-bar {
+  transform-origin: left center;
+  animation: dmhsFloatProgress 6.5s linear forwards;
+}
+
+.dmhs-float-card:hover .dmhs-float-bar {
+  animation-play-state: paused;
+}
+
+/* Custom subtle scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 45%);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139 / 65%);
+}
+
+@media print {
+  aside,
+  header,
+  nav,
+  .dmhs-no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+  }
+  body:has(.dmhs-print-receipt) main > :not(.dmhs-print-receipt),
+  body:has(.dmhs-print-receipt) .dmhs-print-hide {
+    display: none !important;
+  }
+  .dmhs-print-receipt {
+    position: static !important;
+    inset: auto !important;
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+  .dmhs-print-receipt-card {
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 12px !important;
+  }
+}
