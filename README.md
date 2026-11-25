@@ -17,13 +17,6 @@ Full-stack School ERP, Learning Management System, Double-Entry Accounting, Admi
 
 You can use the **1-Click Role Switch / Demo Login** on the sign-in screen or enter any of these credentials directly:
 
-| Role | Login Code | Email | Portal Highlights |
-|---|---|---|---|
-| **Principal / Admin** | `DEV-001` or `ADM-001` | `dev@dmha.edu` | Executive Overview, Admissions, Double-Entry Accounting, Payroll, Task Delegation, Promotion |
-| **Teacher** | `TCH-001` | `nadia@dmha.edu` | Course Materials ↔ Homework Bridge, Attendance, Marks, Assigned Tasks, Faculty Finance |
-| **Office Staff (Accounts)** | `STF-ACC` | `rafiqul@dmha.edu` | Fee Collection, Vouchers, Quick Costs, Payroll, Assigned Tasks |
-| **Guardian** | `GRD-001` | `tariq@dmha.edu` | Child Attendance, Homework & Attachments, Online Fee Checkout, Leaves, Messaging |
-| **Student** | `STU-14` | `araf@dmha.edu` | Subject/Chapter Course Materials, Quizzes, Homework Uploads, Digital ID |
 
 ## Free 24/7 Cloud Deployment
 
