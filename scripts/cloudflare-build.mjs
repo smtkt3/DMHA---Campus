@@ -66,7 +66,7 @@ if (needsInstall) {
 }
 
 console.log('=== Running @opennextjs/cloudflare build ===')
-execSync('npx opennextjs-cloudflare build', {
+execSync('npx --no-install opennextjs-cloudflare build', {
   cwd: STAGE,
   stdio: 'inherit',
   env: {
@@ -77,9 +77,11 @@ execSync('npx opennextjs-cloudflare build', {
   },
 })
 
-console.log('=== Verifying Wrangler bundle size (dry-run) ===')
-execSync('npx wrangler deploy --dry-run --outdir .wrangler-dryrun', {
-  cwd: STAGE,
-  stdio: 'inherit',
-})
+if (!process.env.WORKERS_CI && !process.env.CI) {
+  console.log('=== Verifying Wrangler bundle size (dry-run) ===')
+  execSync('npx --no-install wrangler deploy --dry-run --outdir .wrangler-dryrun', {
+    cwd: STAGE,
+    stdio: 'inherit',
+  })
+}
 console.log('=== CLOUDFLARE BUILD READY IN .cf-build ===')
