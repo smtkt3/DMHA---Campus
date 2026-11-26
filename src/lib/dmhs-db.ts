@@ -1,7 +1,13 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import {
+  DB_DIR,
+  DB_PATH,
+  type DmhsSqlDb,
+  isCloudflareSqlRuntime,
+  openDmhsSqlDb,
+} from './dmhs-sqlite-driver'
 
 export type DbUserRole = 'admin' | 'guardian' | 'teacher' | 'student' | 'staff'
 
@@ -46,19 +52,14 @@ export interface DbStats {
   lastUpdatedAt: string | null
 }
 
-const DB_DIR = process.env.DMHS_DATA_DIR
-  ? path.resolve(process.env.DMHS_DATA_DIR)
-  : path.join(process.cwd(), 'data')
-const DB_PATH = path.join(DB_DIR, 'dmhs.sqlite')
-
 declare global {
   // eslint-disable-next-line no-var
-  var __dmhsSqliteDb: DatabaseSync | undefined
+  var __dmhsSqliteDb: DmhsSqlDb | undefined
   // eslint-disable-next-line no-var
   var __dmhsSchemaVersion: number | undefined
 }
 
-const CURRENT_SCHEMA_VERSION = 7
+const CURRENT_SCHEMA_VERSION = 8
 
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex')
@@ -75,7 +76,7 @@ export function verifyPassword(password: string, storedHash: string): boolean {
   return crypto.timingSafeEqual(derived, keyBuf)
 }
 
-function seedDefaultUsers(db: DatabaseSync) {
+function seedDefaultUsers(db: DmhsSqlDb) {
   const defaultPass = hashPassword('dmha2026')
   const now = new Date().toISOString()
 
@@ -157,16 +158,12 @@ function seedDefaultUsers(db: DatabaseSync) {
   }
 }
 
-export function getDmhsDb(): DatabaseSync {
+export function getDmhsDb(): DmhsSqlDb {
   if (globalThis.__dmhsSqliteDb && globalThis.__dmhsSchemaVersion === CURRENT_SCHEMA_VERSION) {
     return globalThis.__dmhsSqliteDb
   }
 
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true })
-  }
-
-  const db = globalThis.__dmhsSqliteDb || new DatabaseSync(DB_PATH)
+  const db = globalThis.__dmhsSqliteDb || openDmhsSqlDb()
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -323,6 +320,23 @@ export function getDmhsDb(): DatabaseSync {
       marked_by_name TEXT NOT NULL,
       marked_at TEXT NOT NULL,
       UNIQUE(attendance_date, student_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS dmhs_uploads (
+      id TEXT PRIMARY KEY,
+      folder TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      content_base64 TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS dmhs_snapshots (
+      filename TEXT PRIMARY KEY,
+      size_kb INTEGER NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
   `)
 
@@ -1072,15 +1086,15 @@ export function getDbStats(): DbStats {
 
   let sizeKb = 0
   try {
-    const stat = fs.statSync(DB_PATH)
-    sizeKb = Math.max(1, Math.round(stat.size / 1024))
+    const bytes = db.getDatabaseSizeBytes ? db.getDatabaseSizeBytes() : fs.statSync(DB_PATH).size
+    sizeKb = Math.max(1, Math.round(bytes / 1024))
   } catch {
     sizeKb = 0
   }
 
   return {
-    engine: 'SQLite 3 (Node Native WAL)',
-    dbFile: 'data/dmhs.sqlite',
+    engine: db.isCloudflare ? 'Cloudflare Durable Object SQLite' : 'SQLite 3 (Node Native WAL)',
+    dbFile: db.isCloudflare ? 'cloudflare://DMHA_DB/dmha-campus-main' : 'data/dmhs.sqlite',
     sizeKb,
     usersCount: count('dmhs_users'),
     sessionsCount: count('dmhs_sessions'),
@@ -1358,16 +1372,67 @@ export interface BackupSnapshotFile {
   createdAt: string
 }
 
-const BACKUPS_DIR = path.join(process.cwd(), 'data', 'backups')
+const BACKUPS_DIR = path.join(DB_DIR, 'backups')
+
+export function saveUploadedFileToDb(params: {
+  folder: string
+  filename: string
+  mime: string
+  buffer: Buffer
+}): void {
+  const db = getDmhsDb()
+  const key = `${params.folder}/${params.filename}`
+  db.prepare(
+    `INSERT OR REPLACE INTO dmhs_uploads (id, folder, filename, mime, size_bytes, content_base64, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    key,
+    params.folder,
+    params.filename,
+    params.mime,
+    params.buffer.byteLength,
+    params.buffer.toString('base64'),
+    new Date().toISOString(),
+  )
+}
+
+export function loadUploadedFileFromDb(
+  folder: string,
+  filename: string,
+): { mime: string; buffer: Buffer } | null {
+  const db = getDmhsDb()
+  const key = `${folder}/${filename}`
+  const row = db
+    .prepare('SELECT mime, content_base64 FROM dmhs_uploads WHERE id = ? LIMIT 1')
+    .get(key) as { mime: string; content_base64: string } | undefined
+  if (!row) return null
+  return {
+    mime: row.mime,
+    buffer: Buffer.from(row.content_base64, 'base64'),
+  }
+}
 
 export function listSnapshotFiles(): BackupSnapshotFile[] {
   try {
-    if (!fs.existsSync(BACKUPS_DIR)) return []
+    if (isCloudflareSqlRuntime()) {
+      const db = getDmhsDb()
+      const rows = db
+        .prepare(
+          'SELECT filename, size_kb, created_at FROM dmhs_snapshots ORDER BY created_at DESC LIMIT 20',
+        )
+        .all() as Array<{ filename: string; size_kb: number; created_at: string }>
+      return rows.map((r) => ({
+        filename: r.filename,
+        sizeKb: r.size_kb,
+        createdAt: r.created_at,
+      }))
+    }
+    if (!fs.existsSync(/*turbopackIgnore: true*/ BACKUPS_DIR)) return []
     const files = fs
-      .readdirSync(BACKUPS_DIR)
+      .readdirSync(/*turbopackIgnore: true*/ BACKUPS_DIR)
       .filter((f) => f.endsWith('.json'))
       .map((filename) => {
-        const stat = fs.statSync(path.join(BACKUPS_DIR, filename))
+        const stat = fs.statSync(path.join(/*turbopackIgnore: true*/ BACKUPS_DIR, filename))
         return {
           filename,
           sizeKb: Math.max(1, Math.round(stat.size / 1024)),
@@ -1387,19 +1452,17 @@ export function createScheduledSnapshotFile(actorName: string): {
   error?: string
 } {
   try {
-    if (!fs.existsSync(BACKUPS_DIR)) {
-      fs.mkdirSync(BACKUPS_DIR, { recursive: true })
-    }
     const state = loadPersistedState()
     const accounts = listAuthAccounts()
     const biometrics = listBiometricCredentials()
     const payments = listPaymentTransactions(500)
     const stats = getDbStats()
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const nowIso = new Date().toISOString()
+    const stamp = nowIso.replace(/[:.]/g, '-').slice(0, 19)
     const filename = `DMHA-Snapshot-${stamp}.json`
     const payload = {
       app: 'DMHA Smart Learning App',
-      exportedAt: new Date().toISOString(),
+      exportedAt: nowIso,
       createdBy: actorName,
       schemaVersion: 3,
       stats,
@@ -1408,15 +1471,32 @@ export function createScheduledSnapshotFile(actorName: string): {
       paymentLedger: payments,
       schoolState: state.data,
     }
-    const targetPath = path.join(BACKUPS_DIR, filename)
     const serialized = JSON.stringify(payload, null, 2)
+    const sizeKb = Math.max(1, Math.round(Buffer.byteLength(serialized, 'utf8') / 1024))
+
+    if (isCloudflareSqlRuntime()) {
+      const db = getDmhsDb()
+      db.prepare(
+        `INSERT OR REPLACE INTO dmhs_snapshots (filename, size_kb, payload_json, created_at)
+         VALUES (?, ?, ?, ?)`,
+      ).run(filename, sizeKb, serialized, nowIso)
+      return {
+        ok: true,
+        snapshot: { filename, sizeKb, createdAt: nowIso },
+      }
+    }
+
+    if (!fs.existsSync(/*turbopackIgnore: true*/ BACKUPS_DIR)) {
+      fs.mkdirSync(/*turbopackIgnore: true*/ BACKUPS_DIR, { recursive: true })
+    }
+    const targetPath = path.join(/*turbopackIgnore: true*/ BACKUPS_DIR, filename)
     fs.writeFileSync(targetPath, serialized, 'utf8')
     return {
       ok: true,
       snapshot: {
         filename,
-        sizeKb: Math.max(1, Math.round(Buffer.byteLength(serialized, 'utf8') / 1024)),
-        createdAt: new Date().toISOString(),
+        sizeKb,
+        createdAt: nowIso,
       },
     }
   } catch (err) {
@@ -1465,7 +1545,7 @@ export interface PickupPassRecord {
   createdAt: string
 }
 
-function getPickupSigningKey(db: DatabaseSync): string {
+function getPickupSigningKey(db: DmhsSqlDb): string {
   const envKey = process.env.DMHS_PICKUP_SECRET?.trim()
   if (envKey) return envKey
 
@@ -1483,7 +1563,7 @@ function getPickupSigningKey(db: DatabaseSync): string {
 }
 
 function computePickupSignature(
-  db: DatabaseSync,
+  db: DmhsSqlDb,
   passId: string,
   studentId: string,
   issuedDate: string,
@@ -1575,7 +1655,7 @@ export function getOrCreateDailyPickupPass(params: {
 }
 
 function createFreshPickupPass(
-  db: DatabaseSync,
+  db: DmhsSqlDb,
   params: {
     studentId: string
     studentName: string

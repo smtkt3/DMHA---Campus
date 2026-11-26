@@ -15,6 +15,10 @@ logs/
 .tmp-*
 /.figma/design-context/
 
+.cf-build/
+.open-next/
+.wrangler/
+
 # Local runtime SQLite data, test uploads & standalone Expo mobile repo
 data/
 *.sqlite

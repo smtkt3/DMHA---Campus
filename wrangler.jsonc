@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dmha-campus",
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "DMHS_ALLOW_DEMO_LOGIN": "true"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DMHA_DB",
+        "class_name": "DmhaCampusDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DmhaCampusDO"]
+    }
+  ]
+}

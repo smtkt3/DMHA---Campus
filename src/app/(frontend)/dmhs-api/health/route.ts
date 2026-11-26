@@ -12,8 +12,9 @@ export async function GET() {
       ok: true,
       status: 'healthy',
       service: 'dmha-smart-learning-app',
+      runtime: db.isCloudflare ? 'cloudflare-workers-do' : 'nodejs',
       node: process.version,
-      db: 'sqlite-wal',
+      db: db.isCloudflare ? 'cloudflare-do-sqlite' : 'sqlite-wal',
       timestamp: new Date().toISOString(),
     })
   } catch (err) {

@@ -1,5 +1,6 @@
 import { registerSseClient, unregisterSseClient } from '@/lib/dmhs-realtime'
 import { requireAuthSession } from '@/lib/dmhs-security'
+import { isCloudflareSqlRuntime } from '@/lib/dmhs-sqlite-driver'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,26 @@ export async function GET(request: Request) {
   const role = session.role
 
   const encoder = new TextEncoder()
+
+  // On Cloudflare Durable Objects free tier, return a short clean SSE handshake
+  // with a gentle retry hint so long-lived idle sockets don't burn DO GB-seconds.
+  if (isCloudflareSqlRuntime()) {
+    const body =
+      `retry: 20000\n` +
+      `data: ${JSON.stringify({
+        type: 'connected',
+        sourceClientId: clientId,
+        connectedCount: 1,
+        mode: 'cloudflare-edge',
+      })}\n\n`
+    return new Response(body, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+      },
+    })
+  }
+
   let heartbeat: ReturnType<typeof setInterval> | null = null
 
   const stream = new ReadableStream<Uint8Array>({

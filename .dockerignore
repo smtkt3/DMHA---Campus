@@ -7,6 +7,10 @@ build/
 .cache/
 *.tsbuildinfo
 
+.cf-build/
+.open-next/
+.wrangler/
+
 # Version control & local secrets
 .git/
 .gitignore

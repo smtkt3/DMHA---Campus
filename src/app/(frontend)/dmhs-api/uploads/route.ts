@@ -2,8 +2,9 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { NextResponse } from 'next/server'
-import { appendSecurityAudit } from '@/lib/dmhs-db'
+import { appendSecurityAudit, saveUploadedFileToDb } from '@/lib/dmhs-db'
 import { getClientIpFromRequest, requireAuthSession } from '@/lib/dmhs-security'
+import { isCloudflareSqlRuntime } from '@/lib/dmhs-sqlite-driver'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -176,20 +177,25 @@ export async function POST(request: Request) {
     }
 
     const isVideo = mime.startsWith('video/')
-    const maxBytes = !isAdminOrTeacher
-      ? 10 * 1024 * 1024
-      : isVideo
-        ? 60 * 1024 * 1024
-        : 15 * 1024 * 1024
+    const isCf = isCloudflareSqlRuntime()
+    const maxBytes = isCf
+      ? 5 * 1024 * 1024
+      : !isAdminOrTeacher
+        ? 10 * 1024 * 1024
+        : isVideo
+          ? 60 * 1024 * 1024
+          : 15 * 1024 * 1024
     if (buffer.byteLength > maxBytes) {
       return NextResponse.json(
         {
           ok: false,
-          error: !isAdminOrTeacher
-            ? 'Attachment exceeds 10 MB maximum upload limit.'
-            : isVideo
-              ? 'Video exceeds 60 MB maximum upload limit.'
-              : 'File exceeds 15 MB maximum upload limit.',
+          error: isCf
+            ? 'File exceeds 5 MB upload limit on Cloudflare Free SQLite storage.'
+            : !isAdminOrTeacher
+              ? 'Attachment exceeds 10 MB maximum upload limit.'
+              : isVideo
+                ? 'Video exceeds 60 MB maximum upload limit.'
+                : 'File exceeds 15 MB maximum upload limit.',
         },
         { status: 413 },
       )
@@ -197,16 +203,25 @@ export async function POST(request: Request) {
 
     const uniqueName = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`
 
-    // Persist file cleanly on server disk and serve dynamically via /dmhs-api/uploads/
-    // so newly uploaded files work reliably in Next.js standalone production containers.
-    const uploadRoot = process.env.DMHS_UPLOAD_DIR
-      ? path.resolve(/*turbopackIgnore: true*/ process.env.DMHS_UPLOAD_DIR)
-      : path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', 'uploads')
-    const targetDir = path.join(/*turbopackIgnore: true*/ uploadRoot, safeFolder)
-    if (!fs.existsSync(/*turbopackIgnore: true*/ targetDir)) {
-      fs.mkdirSync(/*turbopackIgnore: true*/ targetDir, { recursive: true })
+    if (isCf) {
+      saveUploadedFileToDb({
+        folder: safeFolder,
+        filename: uniqueName,
+        mime,
+        buffer,
+      })
+    } else {
+      // Persist file cleanly on server disk and serve dynamically via /dmhs-api/uploads/
+      // so newly uploaded files work reliably in Next.js standalone production containers.
+      const uploadRoot = process.env.DMHS_UPLOAD_DIR
+        ? path.resolve(/*turbopackIgnore: true*/ process.env.DMHS_UPLOAD_DIR)
+        : path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', 'uploads')
+      const targetDir = path.join(/*turbopackIgnore: true*/ uploadRoot, safeFolder)
+      if (!fs.existsSync(/*turbopackIgnore: true*/ targetDir)) {
+        fs.mkdirSync(/*turbopackIgnore: true*/ targetDir, { recursive: true })
+      }
+      fs.writeFileSync(path.join(/*turbopackIgnore: true*/ targetDir, uniqueName), buffer)
     }
-    fs.writeFileSync(path.join(/*turbopackIgnore: true*/ targetDir, uniqueName), buffer)
 
     const publicUrl = `/dmhs-api/uploads/${safeFolder}/${uniqueName}`
     appendSecurityAudit({
@@ -219,7 +234,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      storage: process.env.S3_BUCKET ? 'cloud_ready_local_mirror' : 'local_disk',
+      storage: isCf
+        ? 'cloudflare_do_sqlite'
+        : process.env.S3_BUCKET
+          ? 'cloud_ready_local_mirror'
+          : 'local_disk',
       url: publicUrl,
       filename: originalFilename,
       sizeKb: Math.max(1, Math.round(buffer.byteLength / 1024)),
